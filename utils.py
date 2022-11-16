@@ -17,8 +17,8 @@ def get_train_directory(args):
 
     if args.data_opt == 'Coronal_PD':
 
-        kspace_dir = '...'
-        coil_dir = '...'
+        kspace_dir = "/data/projects/recon/data/public/fastmri/knees/PD/multicoil_train/file1000108.h5"
+        coil_dir = '/data/projects/recon/data/public/fastmri/knees/sensitivity_maps/PD/multicoil_train/file1000108.h5'
 
     elif args.data_opt == 'Coronal_PDFS':
 
@@ -28,7 +28,7 @@ def get_train_directory(args):
     else:
         raise ValueError('Invalid data option')
 
-    mask_dir = '...'
+    mask_dir = 'masks/masks.h5'
 
     print('\n kspace dir : ', kspace_dir, '\n \n coil dir :', coil_dir, '\n \n mask dir: ', mask_dir)
 
@@ -52,9 +52,9 @@ def get_test_directory(args):
     """
     if args.data_opt == 'Coronal_PD':
 
-        kspace_dir = '...'
-        coil_dir = '...'
-        saved_model_dir = '../SSDU_Coronal_PD_100Epochs_Rate4_10Unrolls_GaussianSelection'
+        kspace_dir = '/data/projects/recon/data/public/fastmri/knees/PD/multicoil_val'
+        coil_dir = '/data/projects/recon/data/public/fastmri/knees/sensitivity_maps/PD/multicoil_val'
+        saved_model_dir = '/home/func_bmep1/scratch/models/ssdu/SSDU_Coronal_PD_100Epochs_Rate4_10Unrolls_GaussianSelection'
 
     elif args.data_opt == 'Coronal_PDFS':
 

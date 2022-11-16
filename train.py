@@ -14,9 +14,9 @@ import UnrollNet
 parser = parser_ops.get_parser()
 args = parser.parse_args()
 os.environ["HDF5_USE_FILE_LOCKING"] = "FALSE"
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+# os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
-save_dir ='saved_models'
+save_dir ='/home/func_bmep1/scratch/models/ssdu/saved_models'
 directory = os.path.join(save_dir, 'SSDU_' + args.data_opt + '_' +str(args.epochs)+'Epochs_Rate'+ str(args.acc_rate) +\
                          '_' + str(args.nb_unroll_blocks) + 'Unrolls_' + args.mask_type+'Selection' )
 
@@ -41,8 +41,9 @@ kspace_dir, coil_dir, mask_dir = utils.get_train_directory(args)
 # %% kspace and sensitivity maps are assumed to be in .h5 format and mask is assumed to be in .mat
 # Users can change these formats based on their dataset
 kspace_train = h5.File(kspace_dir, "r")['kspace'][:]
-sens_maps = h5.File(coil_dir, "r")['sens_maps'][:]
-original_mask = sio.loadmat(mask_dir)['mask']
+sens_maps = h5.File(coil_dir, "r")['sensitivity_map'][:]
+original_mask = h5.File(mask_dir, "r")['random1d'][:]
+# original_mask = sio.loadmat(mask_dir)['mask']
 
 print('\n Normalize the kspace to 0-1 region')
 for ii in range(np.shape(kspace_train)[0]):
@@ -50,6 +51,8 @@ for ii in range(np.shape(kspace_train)[0]):
 
 print('\n size of kspace: ', kspace_train.shape, ', maps: ', sens_maps.shape, ', mask: ', original_mask.shape)
 nSlices, *_ = kspace_train.shape
+print('nSlices= ', nSlices)
+
 trn_mask, loss_mask = np.empty((nSlices, args.nrow_GLOB, args.ncol_GLOB), dtype=np.complex64), \
                       np.empty((nSlices, args.nrow_GLOB, args.ncol_GLOB), dtype=np.complex64)
 
