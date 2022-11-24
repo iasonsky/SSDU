@@ -1,4 +1,5 @@
 from typing import Tuple
+import matplotlib.pyplot as plt
 import tensorflow as tf
 import scipy.io as sio
 import numpy as np
@@ -24,15 +25,7 @@ def complex_center_crop(data: np.ndarray, shape: Tuple[int, int]) -> np.ndarray:
     -------
     The center cropped image.
     """
-    if not (0 < shape[0] <= data.shape[-2] and 0 < shape[1] <= data.shape[-1]):
-        print('shape[0]=', shape[0])
-        print('data.shape[-3]=', data.shape[-3])
-        print('shape[1]=', shape[1] )
-        print('data.shape[-2]=', data.shape[-2])
-        print( shape[0] <= data.shape[-3])
-        print(0 < shape[0] <= data.shape[-3])
-        # print(0 < shape[1] <= data.shape[-2])
-        
+    if not (0 < shape[0] <= data.shape[-2] and 0 < shape[1] <= data.shape[-1]):       
         raise ValueError("Invalid shapes.")
 
     w_from = np.divide((data.shape[-2] - shape[0]), 2)
@@ -84,7 +77,6 @@ imspace_train = np.fft.fftshift(kspace_train, axes=(-2, -1))
 imspace_train = np.fft.ifftn(imspace_train, axes=(-2, -1), norm="ortho")
 imspace_train = np.fft.ifftshift(imspace_train, axes=(-2, -1))
 
-import matplotlib.pyplot as plt
 plt.imshow(np.abs(imspace_train[20, 0, :, :]), cmap='gray')
 plt.savefig('imspace.png')
 plt.show()
@@ -97,7 +89,7 @@ plt.savefig('imspace_cropped.png')
 plt.show()
 kspace_train_cropped = np.fft.fftshift(imspace_train_cropped, axes=(-2, -1))
 kspace_train_cropped = np.fft.fftn(kspace_train_cropped, axes=(-2, -1), norm="ortho")
-# kspace_train_cropped = np.fft.ifftshift(kspace_train_cropped, axes=(-2, -1))
+kspace_train_cropped = np.fft.ifftshift(kspace_train_cropped, axes=(-2, -1))
 print('kspace_train_cropped: ',kspace_train_cropped.shape)
 
 # assign the cropped k-space
@@ -106,6 +98,18 @@ kspace_train = kspace_train_cropped
 sens_maps = h5.File(coil_dir, "r")['sensitivity_map'][:]
 original_mask = h5.File(mask_dir, "r")['random1d'][:]
 # original_mask = sio.loadmat(mask_dir)['mask']
+
+#plot sensitivity maps
+print('sensmaps shape; ',sens_maps.shape)
+plt.imshow(np.abs(sens_maps[20, 0, :, :]), cmap='gray')
+plt.savefig('sensmaps.png')
+plt.show()
+
+sens_maps = complex_center_crop(sens_maps, (320,368))
+print('sensmaps cropped shape: ',sens_maps.shape)
+plt.imshow(np.abs(sens_maps[20, 0, :, :]), cmap='gray')
+plt.savefig('sensmap_cropped.png')
+plt.show()
 
 print('\n Normalize the kspace to 0-1 region')
 for ii in range(np.shape(kspace_train)[0]):
