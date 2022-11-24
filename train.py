@@ -1,3 +1,4 @@
+from typing import Tuple
 import tensorflow as tf
 import scipy.io as sio
 import numpy as np
@@ -11,12 +12,48 @@ import parser_ops
 import masks.ssdu_masks as ssdu_masks
 import UnrollNet
 
+def complex_center_crop(data: np.ndarray, shape: Tuple[int, int]) -> np.ndarray:
+    """
+    Apply a center crop to the input image or batch of complex images.
+    Parameters
+    ----------
+    data: The complex input tensor to be center cropped. It should have at least 3 dimensions and the cropping is
+        applied along dimensions -3 and -2 and the last dimensions should have a size of 2.
+    shape: The output shape. The shape should be smaller than the corresponding dimensions of data.
+    Returns
+    -------
+    The center cropped image.
+    """
+    if not (0 < shape[0] <= data.shape[-2] and 0 < shape[1] <= data.shape[-1]):
+        print('shape[0]=', shape[0])
+        print('data.shape[-3]=', data.shape[-3])
+        print('shape[1]=', shape[1] )
+        print('data.shape[-2]=', data.shape[-2])
+        print( shape[0] <= data.shape[-3])
+        print(0 < shape[0] <= data.shape[-3])
+        # print(0 < shape[1] <= data.shape[-2])
+        
+        raise ValueError("Invalid shapes.")
+
+    w_from = np.divide((data.shape[-2] - shape[0]), 2)
+    h_from = np.divide((data.shape[-1] - shape[1]), 2)
+    w_to = w_from + shape[0]
+    h_to = h_from + shape[1]
+
+    # cast everything to int
+    w_from = int(w_from)
+    w_to = int(w_to)
+    h_from = int(h_from)
+    h_to = int(h_to)
+
+    return data[:, : ,w_from:w_to, h_from:h_to]  # type: ignore
+
 parser = parser_ops.get_parser()
 args = parser.parse_args()
 os.environ["HDF5_USE_FILE_LOCKING"] = "FALSE"
-# os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+os.environ["CUDA_VISIBLE_DEVICES"] = "3"
 
-save_dir ='/home/func_bmep1/scratch/models/ssdu/saved_models'
+save_dir ='/home/iskylitsis/scratch/models/ssdu/saved_models'
 directory = os.path.join(save_dir, 'SSDU_' + args.data_opt + '_' +str(args.epochs)+'Epochs_Rate'+ str(args.acc_rate) +\
                          '_' + str(args.nb_unroll_blocks) + 'Unrolls_' + args.mask_type+'Selection' )
 
@@ -40,7 +77,32 @@ kspace_dir, coil_dir, mask_dir = utils.get_train_directory(args)
 
 # %% kspace and sensitivity maps are assumed to be in .h5 format and mask is assumed to be in .mat
 # Users can change these formats based on their dataset
-kspace_train = h5.File(kspace_dir, "r")['kspace'][:]
+kspace_train = h5.File(kspace_dir, "r")['kspace'][()]
+print('kspace_train: ',kspace_train.shape)
+
+imspace_train = np.fft.fftshift(kspace_train, axes=(-2, -1))
+imspace_train = np.fft.ifftn(imspace_train, axes=(-2, -1), norm="ortho")
+imspace_train = np.fft.ifftshift(imspace_train, axes=(-2, -1))
+
+import matplotlib.pyplot as plt
+plt.imshow(np.abs(imspace_train[20, 0, :, :]), cmap='gray')
+plt.savefig('imspace.png')
+plt.show()
+
+imspace_train_cropped = complex_center_crop(imspace_train, (320,368))
+
+print('imspace_train_cropped.shape:', imspace_train_cropped.shape)
+plt.imshow(np.abs(imspace_train_cropped[20, 0, :, :]), cmap='gray')
+plt.savefig('imspace_cropped.png')
+plt.show()
+kspace_train_cropped = np.fft.fftshift(imspace_train_cropped, axes=(-2, -1))
+kspace_train_cropped = np.fft.fftn(kspace_train_cropped, axes=(-2, -1), norm="ortho")
+# kspace_train_cropped = np.fft.ifftshift(kspace_train_cropped, axes=(-2, -1))
+print('kspace_train_cropped: ',kspace_train_cropped.shape)
+
+# assign the cropped k-space
+kspace_train = kspace_train_cropped 
+
 sens_maps = h5.File(coil_dir, "r")['sensitivity_map'][:]
 original_mask = h5.File(mask_dir, "r")['random1d'][:]
 # original_mask = sio.loadmat(mask_dir)['mask']
@@ -52,6 +114,14 @@ for ii in range(np.shape(kspace_train)[0]):
 print('\n size of kspace: ', kspace_train.shape, ', maps: ', sens_maps.shape, ', mask: ', original_mask.shape)
 nSlices, *_ = kspace_train.shape
 print('nSlices= ', nSlices)
+
+# # get the middle slice for kspace and sens maps
+# kspace_train = kspace_train[kspace_train.shape[0] // 2]
+# sens_maps = sens_maps[sens_maps.shape[0] // 2]
+
+# print('\n size of kspace: ', kspace_train.shape, ', maps: ', sens_maps.shape, ', mask: ', original_mask.shape)
+# nSlices, *_ = kspace_train.shape
+# print('nSlices= ', nSlices)
 
 trn_mask, loss_mask = np.empty((nSlices, args.nrow_GLOB, args.ncol_GLOB), dtype=np.complex64), \
                       np.empty((nSlices, args.nrow_GLOB, args.ncol_GLOB), dtype=np.complex64)

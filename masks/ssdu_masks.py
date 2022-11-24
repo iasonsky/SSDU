@@ -31,15 +31,20 @@ class ssdu_masks():
         self.small_acs_block = small_acs_block
 
     def Gaussian_selection(self, input_data, input_mask, std_scale=4, num_iter=1):
+        print('input_data shape: ', input_data.shape)
+        # nrow, ncol = input_data.shape[0], input_data.shape[1]
+        nrow, ncol = input_data.shape[1], input_data.shape[2]
 
-        nrow, ncol = input_data.shape[0], input_data.shape[1]
         center_kx = int(utils.find_center_ind(input_data, axes=(1, 2)))
         center_ky = int(utils.find_center_ind(input_data, axes=(0, 2)))
 
         if num_iter == 0:
             print(f'\n Gaussian selection is processing, rho = {self.rho:.2f}, center of kspace: center-kx: {center_kx}, center-ky: {center_ky}')
 
+        input_mask = np.repeat(np.expand_dims(input_mask, 0), input_data.shape[1], 0)
+
         temp_mask = np.copy(input_mask)
+        print('input_mask.shape:',input_mask.shape)
         temp_mask[center_kx - self.small_acs_block[0] // 2:center_kx + self.small_acs_block[0] // 2,
         center_ky - self.small_acs_block[1] // 2:center_ky + self.small_acs_block[1] // 2] = 0
 
