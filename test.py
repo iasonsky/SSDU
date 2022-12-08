@@ -1,3 +1,4 @@
+from typing import Tuple
 import os
 import numpy as np
 import tensorflow as tf
@@ -8,10 +9,38 @@ import time
 import utils
 import parser_ops
 
+def mask_center_crop(data: np.ndarray, shape: Tuple[int, int]) -> np.ndarray:
+    """
+    Apply a center crop to the input image or batch of complex images.
+    Parameters
+    ----------
+    data: The complex input tensor to be center cropped. It should have at least 3 dimensions and the cropping is
+        applied along dimensions -3 and -2 and the last dimensions should have a size of 2.
+    shape: The output shape. The shape should be smaller than the corresponding dimensions of data.
+    Returns
+    -------
+    The center cropped image.
+    """
+    if not (0 < shape[0] <= data.shape[-2] and 0 < shape[1] <= data.shape[-1]):       
+        raise ValueError("Invalid shapes.")
+
+    w_from = np.divide((data.shape[-2] - shape[0]), 2)
+    h_from = np.divide((data.shape[-1] - shape[1]), 2)
+    w_to = w_from + shape[0]
+    h_to = h_from + shape[1]
+
+    # cast everything to int
+    w_from = int(w_from)
+    w_to = int(w_to)
+    h_from = int(h_from)
+    h_to = int(h_to)
+
+    return data[w_from:w_to , h_from:h_to]  # type: ignore
+
 parser = parser_ops.get_parser()
 args = parser.parse_args()
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+os.environ["CUDA_VISIBLE_DEVICES"] = "3"
 os.environ["HDF5_USE_FILE_LOCKING"] = "FALSE"
 
 # .......................Load the Data...........................................
@@ -21,8 +50,12 @@ kspace_dir, coil_dir, mask_dir, saved_model_dir = utils.get_test_directory(args)
 # %% kspace and sensitivity maps are assumed to be in .h5 format and mask is assumed to be in .mat
 # Users can change these formats based on their dataset
 kspace_test = h5.File(kspace_dir, "r")['kspace'][:]
-sens_maps_testAll = h5.File(coil_dir, "r")['sens_maps'][:]
-original_mask = sio.loadmat(mask_dir)['mask']
+sens_maps_testAll = h5.File(coil_dir, "r")['sensitivity_map'][:]
+sens_maps_testAll = np.transpose(sens_maps_testAll, (0, 2, 3, 1))
+# Crop sensitivity maps 
+sens_maps = complex_center_crop(sens_maps_testAll, (320,368))
+original_mask = h5.File(mask_dir, "r")['gaussian2d'][:]
+original_mask = mask_center_crop(original_mask, (320,368)) # crop the mask
 
 print('\n Normalize kspace to 0-1 region')
 for ii in range(np.shape(kspace_test)[0]):

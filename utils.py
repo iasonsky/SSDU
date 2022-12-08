@@ -1,6 +1,6 @@
 import numpy as np
 from skimage.measure import compare_ssim
-
+import pdb
 
 def get_train_directory(args):
     """
@@ -28,7 +28,7 @@ def get_train_directory(args):
     else:
         raise ValueError('Invalid data option')
 
-    mask_dir = 'masks/masks.h5'
+    mask_dir = 'masks/masks_2d.h5'
 
     print('\n kspace dir : ', kspace_dir, '\n \n coil dir :', coil_dir, '\n \n mask dir: ', mask_dir)
 
@@ -51,9 +51,8 @@ def get_test_directory(args):
 
     """
     if args.data_opt == 'Coronal_PD':
-
-        kspace_dir = '/data/projects/recon/data/public/fastmri/knees/PD/multicoil_val'
-        coil_dir = '/data/projects/recon/data/public/fastmri/knees/sensitivity_maps/PD/multicoil_val'
+        kspace_dir = "/data/projects/recon/data/public/fastmri/knees/PD/multicoil_train/file1000108.h5"
+        coil_dir = '/data/projects/recon/data/public/fastmri/knees/sensitivity_maps/PD/multicoil_train/file1000108.h5'
         saved_model_dir = '/home/iskylitsis/scratch/models/ssdu/SSDU_Coronal_PD_100Epochs_Rate4_10Unrolls_GaussianSelection'
 
     elif args.data_opt == 'Coronal_PDFS':
@@ -65,7 +64,7 @@ def get_test_directory(args):
     else:
         raise ValueError('Invalid data option')
 
-    mask_dir = '...'
+    mask_dir = 'masks/masks_2d.h5'
 
     print('\n kspace dir : ', kspace_dir, '\n \n coil dir :', coil_dir,
           '\n \n mask dir: ', mask_dir, '\n \n saved model dir: ', saved_model_dir)
@@ -231,7 +230,6 @@ def sense1(input_kspace, sens_maps, axes=(0, 1)):
     sense1 image
 
     """
-
     image_space = ifft(input_kspace, axes=axes, norm=None, unitary_opt=True)
     Eh_op = np.conj(sens_maps) * image_space
     sense1_image = np.sum(Eh_op, axis=axes[-1] + 1)
