@@ -53,7 +53,7 @@ def get_test_directory(args):
     if args.data_opt == 'Coronal_PD':
         kspace_dir = "/data/projects/recon/data/public/fastmri/knees/PD/multicoil_train/file1000108.h5"
         coil_dir = '/data/projects/recon/data/public/fastmri/knees/sensitivity_maps/PD/multicoil_train/file1000108.h5'
-        saved_model_dir = '/home/iskylitsis/scratch/models/ssdu/SSDU_Coronal_PD_100Epochs_Rate4_10Unrolls_GaussianSelection'
+        saved_model_dir = '/home/iskylitsis/scratch/models/ssdu/saved_models/SSDU_Coronal_PD_100Epochs_Rate4_10Unrolls_GaussianSelection'
 
     elif args.data_opt == 'Coronal_PDFS':
 

@@ -8,6 +8,35 @@ import h5py as h5
 import time
 import utils
 import parser_ops
+import pdb
+
+def complex_center_crop(data: np.ndarray, shape: Tuple[int, int]) -> np.ndarray:
+    """
+    Apply a center crop to the input image or batch of complex images.
+    Parameters
+    ----------
+    data: The complex input tensor to be center cropped. It should have at least 3 dimensions and the cropping is
+        applied along dimensions -3 and -2 and the last dimensions should have a size of 2.
+    shape: The output shape. The shape should be smaller than the corresponding dimensions of data.
+    Returns
+    -------
+    The center cropped image.
+    """
+    if not (0 < shape[0] <= data.shape[-3] and 0 < shape[1] <= data.shape[-2]):       
+        raise ValueError("Invalid shapes.")
+
+    w_from = np.divide((data.shape[-3] - shape[0]), 2)
+    h_from = np.divide((data.shape[-2] - shape[1]), 2)
+    w_to = w_from + shape[0]
+    h_to = h_from + shape[1]
+
+    # cast everything to int
+    w_from = int(w_from)
+    w_to = int(w_to)
+    h_from = int(h_from)
+    h_to = int(h_to)
+
+    return data[:, w_from:w_to , h_from:h_to, :]  # type: ignore
 
 def mask_center_crop(data: np.ndarray, shape: Tuple[int, int]) -> np.ndarray:
     """
@@ -50,10 +79,43 @@ kspace_dir, coil_dir, mask_dir, saved_model_dir = utils.get_test_directory(args)
 # %% kspace and sensitivity maps are assumed to be in .h5 format and mask is assumed to be in .mat
 # Users can change these formats based on their dataset
 kspace_test = h5.File(kspace_dir, "r")['kspace'][:]
+kspace_test = np.transpose(kspace_test, (0, 2, 3, 1))
+print('kspace_test: ', kspace_test.shape)
+
+# Transform the kspace in imspace in order to crop it
+imspace_test = np.fft.fftshift(kspace_test, axes=(-3, -2))
+imspace_test = np.fft.ifftn(imspace_test, axes=(-3, -2), norm="ortho")
+imspace_test = np.fft.ifftshift(imspace_test, axes=(-3, -2))
+
+# Plot imspace
+plt.imshow(np.abs(imspace_test[20, :, :, 0]), cmap='gray')
+plt.title('Imspace')
+plt.show()
+
+# Apply the cropping to imspace
+imspace_test_cropped = complex_center_crop(imspace_test, (320,368))
+print('imspace_test_cropped_cropped.shape:', imspace_test_cropped.shape)
+
+# Plot cropped imspace
+plt.imshow(np.abs(imspace_test_cropped[20, :, :, 0]), cmap='gray')
+plt.title('Imspace Cropped')
+plt.show()
+
+# Transform imspace to kspace
+kspace_test_cropped = np.fft.fftshift(imspace_test_cropped, axes=(-3, -2))
+kspace_test_cropped = np.fft.fftn(kspace_test_cropped, axes=(-3, -2), norm="ortho")
+kspace_test_cropped = np.fft.ifftshift(kspace_test_cropped, axes=(-3, -2))
+print('kspace_test_cropped: ',kspace_test_cropped.shape)
+
+# assign the cropped k-space
+kspace_test = kspace_test_cropped 
+
+# Load sensitivity maps
 sens_maps_testAll = h5.File(coil_dir, "r")['sensitivity_map'][:]
 sens_maps_testAll = np.transpose(sens_maps_testAll, (0, 2, 3, 1))
+
 # Crop sensitivity maps 
-sens_maps = complex_center_crop(sens_maps_testAll, (320,368))
+sens_maps_testAll = complex_center_crop(sens_maps_testAll, (320,368))
 original_mask = h5.File(mask_dir, "r")['gaussian2d'][:]
 original_mask = mask_center_crop(original_mask, (320,368)) # crop the mask
 
