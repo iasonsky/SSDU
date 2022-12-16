@@ -13,6 +13,7 @@ import parser_ops
 import masks.ssdu_masks as ssdu_masks
 import UnrollNet
 import pdb
+import wandb
 
 def complex_center_crop(data: np.ndarray, shape: Tuple[int, int]) -> np.ndarray:
     """
@@ -73,7 +74,8 @@ def mask_center_crop(data: np.ndarray, shape: Tuple[int, int]) -> np.ndarray:
 parser = parser_ops.get_parser()
 args = parser.parse_args()
 os.environ["HDF5_USE_FILE_LOCKING"] = "FALSE"
-os.environ["CUDA_VISIBLE_DEVICES"] = "3"
+os.environ["CUDA_VISIBLE_DEVICES"] = "2"
+wandb.init(project="SSDU")
 
 save_dir ='/home/iskylitsis/scratch/models/ssdu/saved_models'
 directory = os.path.join(save_dir, 'SSDU_' + args.data_opt + '_' +str(args.epochs)+'Epochs_Rate'+ str(args.acc_rate) +\
@@ -251,11 +253,21 @@ nw_input = utils.complex2real(nw_input)
 # pdb.set_trace()
 print('\n size of ref kspace: ', ref_kspace.shape, ', nw_input: ', nw_input.shape, ', maps: ', sens_maps.shape, ', mask: ', trn_mask.shape)
 # pdb.set_trace()
-ref_kspace = ref_kspace[:15, :2, ...]
-nw_input = nw_input[:15, ...]
-sens_maps = sens_maps[:15, :2, ...]
-trn_mask = trn_mask[:15, ...]
-loss_mask = loss_mask[:15, ...]
+
+# This gives OOM error
+ref_kspace = ref_kspace[:5, ...]
+nw_input = nw_input[:5, ...]
+sens_maps = sens_maps[:5, ...]
+trn_mask = trn_mask[:5, ...]
+loss_mask = loss_mask[:5, ...]
+
+# This runs but the cost/error = nan
+# ref_kspace = ref_kspace[:15, :2, ...]
+# nw_input = nw_input[:15, ...]
+# sens_maps = sens_maps[:15, :2, ...]
+# trn_mask = trn_mask[:15, ...]
+# loss_mask = loss_mask[:15, ...]
+
 print('\n size of ref kspace: ', ref_kspace.shape, ', nw_input: ', nw_input.shape, ', maps: ', sens_maps.shape, ', mask: ', trn_mask.shape)
 # kspace shape = [slices, coils, x, y, 2] / if batch is on [batch_size, slices, coils, x, y, 2]
 
@@ -297,29 +309,27 @@ with tf.Session(config=config) as sess:
 
     print('Training...')
     # for ep in range(1, args.epochs + 1):
-    for ep in range(1, 5):
-        print('hello i am in')
+    for ep in range(1, 10):
         sess.run(iterator.initializer, feed_dict=feedDict)
         avg_cost = 0
         tic = time.time()
         try:
 
             for jj in range(total_batch):
-                print('got in the loop {}'.format(jj))
                 tmp, _, _ = sess.run([loss, update_ops, optimizer])
                 avg_cost += tmp / total_batch
-                print('end of loop {}'.format(jj))
             toc = time.time() - tic
             totalLoss.append(avg_cost)
             print("Epoch:", ep, "elapsed_time =""{:f}".format(toc), "cost =", "{:.3f}".format(avg_cost))
-
+            wandb.log({'loss': avg_cost})
         except tf.errors.OutOfRangeError:
             pass
 
         if (np.mod(ep, 10) == 0):
             saver.save(sess, sess_trn_filename, global_step=ep)
             sio.savemat(os.path.join(directory, 'TrainingLog.mat'), {'loss': totalLoss})
-
+        wandb.tensorflow.log(tf.summary.merge_all())
 end_time = time.time()
 sio.savemat(os.path.join(directory, 'TrainingLog.mat'), {'loss': totalLoss})
+wandb.log({'total_loss': totalLoss})
 print('Training completed in  ', ((end_time - start_time) / 60), ' minutes')
