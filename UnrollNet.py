@@ -1,4 +1,4 @@
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 import data_consistency as ssdu_dc
 import tf_utils
 import models.networks as networks

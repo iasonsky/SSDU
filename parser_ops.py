@@ -13,9 +13,9 @@ def get_parser():
                         help='learning rate')
     parser.add_argument('--batchSize', type=int, default=1,
                         help='batch size')
-    parser.add_argument('--nb_unroll_blocks', type=int, default=10,
+    parser.add_argument('--nb_unroll_blocks', type=int, default=2,
                         help='number of unrolled blocks')
-    parser.add_argument('--nb_res_blocks', type=int, default=15,
+    parser.add_argument('--nb_res_blocks', type=int, default=2,
                         help="number of residual blocks in ResNet")
     parser.add_argument('--CG_Iter', type=int, default=10,
                         help='number of Conjugate Gradient iterations for DC')

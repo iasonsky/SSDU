@@ -1,6 +1,8 @@
 import numpy as np
 import utils
 import pdb
+import matplotlib.pyplot as plt
+
 
 class ssdu_masks():
     """
@@ -31,34 +33,32 @@ class ssdu_masks():
         self.small_acs_block = small_acs_block
 
     def Gaussian_selection(self, input_data, input_mask, std_scale=4, num_iter=1):
-        print('input_data shape: ', input_data.shape)
-        
         nrow, ncol = input_data.shape[0], input_data.shape[1]
-        # nrow, ncol = input_data.shape[1], input_data.shape[2]
         center_kx = int(utils.find_center_ind(input_data, axes=(1, 2)))
         center_ky = int(utils.find_center_ind(input_data, axes=(0, 2)))
 
         if num_iter == 0:
             print(f'\n Gaussian selection is processing, rho = {self.rho:.2f}, center of kspace: center-kx: {center_kx}, center-ky: {center_ky}')
 
-        # input_mask = np.repeat(np.expand_dims(input_mask, 0), input_data.shape[1], 0)
-
         temp_mask = np.copy(input_mask)
-        print('input_mask.shape:',input_mask.shape)
-        temp_mask[center_kx - self.small_acs_block[0] // 2:center_kx + self.small_acs_block[0] // 2,
-        center_ky - self.small_acs_block[1] // 2:center_ky + self.small_acs_block[1] // 2] = 0
+        temp_mask[center_kx - self.small_acs_block[0] // 2:center_kx + self.small_acs_block[0] // 2, center_ky - self.small_acs_block[1] // 2:center_ky + self.small_acs_block[1] // 2] = 0
 
         loss_mask = np.zeros_like(input_mask)
         count = 0
 
-        while count <= np.int(np.ceil(np.sum(input_mask[:]) * self.rho)):
+        total = int(np.ceil(np.sum(input_mask[:]) * self.rho))
 
-            indx = np.int(np.round(np.random.normal(loc=center_kx, scale=(nrow - 1) / std_scale)))
-            indy = np.int(np.round(np.random.normal(loc=center_ky, scale=(ncol - 1) / std_scale)))
+        while count <= total:
+            print(f"\r{count}/{total}", end="")
 
-            if (0 <= indx < nrow and 0 <= indy < ncol and temp_mask[indx, indy] == 1 and loss_mask[indx, indy] != 1):
+            indx = int(np.round(np.random.normal(loc=center_kx, scale=(nrow - 1) / std_scale)))
+            indy = int(np.round(np.random.normal(loc=center_ky, scale=(ncol - 1) / std_scale)))
+
+            if 0 <= indx < nrow and 0 <= indy < ncol and temp_mask[indx, indy] == 1 and loss_mask[indx, indy] != 1:
                 loss_mask[indx, indy] = 1
-                count = count + 1
+                count += 1
+
+        # loss_mask = 1 - temp_mask # delete this line to use the original code
 
         trn_mask = input_mask - loss_mask
 
@@ -79,8 +79,7 @@ class ssdu_masks():
         center_ky - self.small_acs_block[1] // 2: center_ky + self.small_acs_block[1] // 2] = 0
 
         pr = np.ndarray.flatten(temp_mask)
-        ind = np.random.choice(np.arange(nrow * ncol),
-                               size=np.int(np.count_nonzero(pr) * self.rho), replace=False, p=pr / np.sum(pr))
+        ind = np.random.choice(np.arange(nrow * ncol), size=int(np.count_nonzero(pr) * self.rho), replace=False, p=pr / np.sum(pr))
 
         [ind_x, ind_y] = utils.index_flatten2nd(ind, (nrow, ncol))
 

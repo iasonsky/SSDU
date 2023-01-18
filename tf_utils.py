@@ -1,4 +1,7 @@
+# import tensorflow.compat.v1 as tf
+# tf.compat.v1.disable_eager_execution()
 import tensorflow as tf
+
 import math
 import os
 import parser_ops
@@ -14,6 +17,7 @@ def test_graph(directory):
     """
 
     tf.reset_default_graph()
+
     # %% placeholders for the unrolled network
     sens_mapsP = tf.placeholder(tf.complex64, shape=(None, args.ncoil_GLOB, args.nrow_GLOB, args.ncol_GLOB), name='sens_maps')
     trn_maskP = tf.placeholder(tf.complex64, shape=(None, args.nrow_GLOB, args.ncol_GLOB), name='trn_mask')
