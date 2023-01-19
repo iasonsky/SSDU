@@ -33,6 +33,8 @@ class ssdu_masks():
         self.small_acs_block = small_acs_block
 
     def Gaussian_selection(self, input_data, input_mask, std_scale=4, num_iter=1):
+        input_data = np.transpose(input_data, (1, 2, 0))
+
         nrow, ncol = input_data.shape[0], input_data.shape[1]
         center_kx = int(utils.find_center_ind(input_data, axes=(1, 2)))
         center_ky = int(utils.find_center_ind(input_data, axes=(0, 2)))
@@ -58,13 +60,12 @@ class ssdu_masks():
                 loss_mask[indx, indy] = 1
                 count += 1
 
-        # loss_mask = 1 - temp_mask # delete this line to use the original code
-
         trn_mask = input_mask - loss_mask
 
         return trn_mask, loss_mask
 
     def uniform_selection(self, input_data, input_mask, num_iter=1):
+        input_data = np.transpose(input_data, (1, 2, 0))
 
         nrow, ncol = input_data.shape[0], input_data.shape[1]
 

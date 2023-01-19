@@ -21,7 +21,7 @@ from tensorboardX import SummaryWriter
 parser = parser_ops.get_parser()
 args = parser.parse_args()
 os.environ["HDF5_USE_FILE_LOCKING"] = "FALSE"
-os.environ["CUDA_VISIBLE_DEVICES"] = "2"
+os.environ["CUDA_VISIBLE_DEVICES"] = "3"
 
 save_dir ='saved_models'
 directory = os.path.join(save_dir, 'SSDU_' + args.data_opt + '_' +str(args.epochs)+'Epochs_Rate'+ str(args.acc_rate) + '_' + str(args.nb_unroll_blocks) + 'Unrolls_' + args.mask_type+'Selection' )
@@ -45,20 +45,13 @@ config.allow_soft_placement = True
 # .......................Load the Data..........................................
 print('\n Loading ', args.data_opt, ' data, acc rate : ', args.acc_rate, ', mask type :', args.mask_type)
 kspace_dir, coil_dir, mask_dir = utils.get_train_directory(args)
+fname = kspace_dir.split('/')[-1].split('.')[0]
 
 # %% kspace and sensitivity maps are assumed to be in .h5 format and mask is assumed to be in .mat
 # Users can change these formats based on their dataset
 kspace_train = h5.File(kspace_dir, "r")['kspace'][:]
 sens_maps = h5.File(coil_dir, "r")['sensitivity_map'][:]
 original_mask = h5.File(mask_dir, "r")['random1d'][:]
-
-fname = kspace_dir.split('/')[-1].split('.')[0]
-
-# pick one slice for now
-slice_start = 15
-slice_end = 16
-kspace_train = kspace_train[slice_start:slice_end]
-sens_maps = sens_maps[slice_start:slice_end]
 
 print('\n Normalize the kspace to 0-1 region')
 for ii in range(np.shape(kspace_train)[0]):
@@ -78,11 +71,7 @@ kspace_train = np.fft.ifftshift(np.fft.fftn(np.fft.ifftshift(imspace_train, axes
 sens_maps = center_crop(sens_maps, [args.nrow_GLOB, args.ncol_GLOB])
 original_mask = np.repeat(np.expand_dims(original_mask, 0), args.nrow_GLOB, axis=0)
 
-writer.add_image("Masks/Original", np.expand_dims(original_mask, 0).astype(np.float32), 0)
-
-target = np.sum(imspace_train * np.conj(sens_maps), axis=1)
-target = np.expand_dims(np.abs(target[0]), 0)
-target = target / np.max(target)
+target = np.abs(np.sum(imspace_train * np.conj(sens_maps), axis=1))
 
 print('\n size of kspace: ', kspace_train.shape, ', maps: ', sens_maps.shape, ', mask: ', original_mask.shape, ', trn_mask: ', trn_mask.shape, ', loss_mask: ', loss_mask.shape, ', nw_input: ', nw_input.shape, ', ref_kspace: ', ref_kspace.shape)
 
@@ -109,9 +98,6 @@ for ii in range(nSlices):
 if args.data_opt == 'Coronal_PD':
     trn_mask[:, :, 0:17] = np.ones((nSlices, args.nrow_GLOB, 17))
     trn_mask[:, :, 352:args.ncol_GLOB] = np.ones((nSlices, args.nrow_GLOB, 16))
-
-writer.add_image("Masks/Training", trn_mask.astype(np.float32), 0)
-writer.add_image("Masks/Loss", loss_mask.astype(np.float32), 0)
 
 # %% Prepare the data for the training
 ref_kspace = utils.complex2real(ref_kspace)
@@ -150,8 +136,6 @@ totalLoss = []
 avg_cost = 0
 with tf.Session(config=config) as sess:
     sess.run(tf.global_variables_initializer())
-
-    # use gpu for training
     print('SSDU Parameters: Epochs: ', args.epochs, ', Batch Size:', args.batchSize, ', Number of trainable parameters: ', sess.run(all_trainable_vars))
     feedDict = {kspaceP: ref_kspace, nw_inputP: nw_input, trn_maskP: trn_mask, loss_maskP: loss_mask, sens_mapsP: sens_maps}
 
@@ -176,17 +160,19 @@ with tf.Session(config=config) as sess:
         if ep % 10 == 0:
             nw_output_ep, _, _, _, _ = UnrollNet.UnrolledNet(nw_inputP, sens_mapsP, trn_maskP, loss_maskP).model
             nw_output_ep = sess.run(nw_output_ep, feed_dict=feedDict)
-            nw_output_ep = np.expand_dims(np.abs(nw_output_ep[0, :, :, 0]), 0)
-            nw_output_ep = nw_output_ep / np.max(nw_output_ep)
+            nw_output_ep = np.abs(nw_output_ep[..., 0])
 
-            writer.add_image(f'{fname}/Target', target.astype(np.float32), ep)
-            writer.add_image(f'{fname}/Reconstruction', nw_output_ep.astype(np.float32), ep)
-            writer.add_image(f'{fname}/Error', np.abs(target - nw_output_ep).astype(np.float32), ep)
+            for slice in range(nw_output_ep.shape[0]):
+                target[slice] = target[slice] / np.max(target[slice])
+                nw_output_ep[slice] = nw_output_ep[slice] / np.max(nw_output_ep[slice])
 
-        # save model
-        saver.save(sess, sess_trn_filename, global_step=ep)
+                writer.add_image(f"{fname}_{str(slice)}/Mask_original", np.abs(np.expand_dims(original_mask, 0)).astype(np.float32), 0)
+                writer.add_image(f"{fname}_{str(slice)}/Mask_training", np.abs(np.expand_dims(trn_mask[slice], 0)).astype(np.float32), 0)
+                writer.add_image(f"{fname}_{str(slice)}/Mask_loss", np.abs(np.expand_dims(loss_mask[slice], 0)).astype(np.float32), 0)
+                writer.add_image(f'{fname}_{str(slice)}/Target', np.expand_dims(target[slice], 0).astype(np.float32), ep)
+                writer.add_image(f'{fname}_{str(slice)}/Reconstruction', np.expand_dims(nw_output_ep[slice], 0).astype(np.float32), ep)
+                writer.add_image(f'{fname}_{str(slice)}/Error', np.expand_dims(np.abs(target[slice] - nw_output_ep[slice]), 0).astype(np.float32), ep)
 
-        if np.mod(ep, 10) == 0:
             saver.save(sess, sess_trn_filename, global_step=ep)
 
 end_time = time.time()
