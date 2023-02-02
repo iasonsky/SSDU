@@ -1,3 +1,6 @@
 *.png
 *.dmp
 wandb
+saved_models
+slurm_job.sh
+*.out

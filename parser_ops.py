@@ -7,15 +7,15 @@ def get_parser():
     # %% hyperparameters for the unrolled network
     parser.add_argument('--acc_rate', type=int, default=4,
                         help='acceleration rate')
-    parser.add_argument('--epochs', type=int, default=100,
+    parser.add_argument('--epochs', type=int, default=200,
                         help='number of epochs to train')
     parser.add_argument('--learning_rate', type=float, default=5e-4,
                         help='learning rate')
     parser.add_argument('--batchSize', type=int, default=1,
                         help='batch size')
-    parser.add_argument('--nb_unroll_blocks', type=int, default=2,
+    parser.add_argument('--nb_unroll_blocks', type=int, default=10, #10
                         help='number of unrolled blocks')
-    parser.add_argument('--nb_res_blocks', type=int, default=2,
+    parser.add_argument('--nb_res_blocks', type=int, default=15, #15
                         help="number of residual blocks in ResNet")
     parser.add_argument('--CG_Iter', type=int, default=10,
                         help='number of Conjugate Gradient iterations for DC')

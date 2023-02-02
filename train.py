@@ -15,13 +15,16 @@ import masks.ssdu_masks as ssdu_masks
 import UnrollNet
 from utils import center_crop
 import matplotlib.pyplot as plt
+from skimage.metrics import structural_similarity
+from skimage.metrics import peak_signal_noise_ratio
+from sklearn.metrics import mean_squared_error
 
 from tensorboardX import SummaryWriter
 
 parser = parser_ops.get_parser()
 args = parser.parse_args()
 os.environ["HDF5_USE_FILE_LOCKING"] = "FALSE"
-os.environ["CUDA_VISIBLE_DEVICES"] = "3"
+# os.environ["CUDA_VISIBLE_DEVICES"] = "2"s
 
 save_dir ='saved_models'
 directory = os.path.join(save_dir, 'SSDU_' + args.data_opt + '_' +str(args.epochs)+'Epochs_Rate'+ str(args.acc_rate) + '_' + str(args.nb_unroll_blocks) + 'Unrolls_' + args.mask_type+'Selection' )
@@ -29,12 +32,13 @@ directory = os.path.join(save_dir, 'SSDU_' + args.data_opt + '_' +str(args.epoch
 if not os.path.exists(directory):
     os.makedirs(directory)
 
+# Initialize writer
 writer = SummaryWriter(log_dir=directory)
 
 print('\n create a test model for the testing')
 test_graph_generator = tf_utils.test_graph(directory)
 
-#...........................................................................d....
+#...............................................................................
 start_time = time.time()
 print('.................SSDU Training.....................')
 tf.reset_default_graph()
@@ -45,10 +49,10 @@ config.allow_soft_placement = True
 # .......................Load the Data..........................................
 print('\n Loading ', args.data_opt, ' data, acc rate : ', args.acc_rate, ', mask type :', args.mask_type)
 kspace_dir, coil_dir, mask_dir = utils.get_train_directory(args)
+# Take the fname in order to log the slices to tensorboard
 fname = kspace_dir.split('/')[-1].split('.')[0]
 
-# %% kspace and sensitivity maps are assumed to be in .h5 format and mask is assumed to be in .mat
-# Users can change these formats based on their dataset
+# Load kspace, sensitivity maps and mask
 kspace_train = h5.File(kspace_dir, "r")['kspace'][:]
 sens_maps = h5.File(coil_dir, "r")['sensitivity_map'][:]
 original_mask = h5.File(mask_dir, "r")['random1d'][:]
@@ -69,8 +73,9 @@ imspace_train = np.fft.ifftshift(np.fft.ifftn(np.fft.ifftshift(kspace_train, axe
 imspace_train = center_crop(imspace_train, [args.nrow_GLOB, args.ncol_GLOB])
 kspace_train = np.fft.ifftshift(np.fft.fftn(np.fft.ifftshift(imspace_train, axes=(-2, -1)), axes=(-2, -1)), axes=(-2, -1))
 sens_maps = center_crop(sens_maps, [args.nrow_GLOB, args.ncol_GLOB])
-original_mask = np.repeat(np.expand_dims(original_mask, 0), args.nrow_GLOB, axis=0)
+original_mask = np.repeat(np.expand_dims(original_mask, 0), args.nrow_GLOB, axis=0) # 2d projection of the 1d mask
 
+# calculate target
 target = np.abs(np.sum(imspace_train * np.conj(sens_maps), axis=1))
 
 print('\n size of kspace: ', kspace_train.shape, ', maps: ', sens_maps.shape, ', mask: ', original_mask.shape, ', trn_mask: ', trn_mask.shape, ', loss_mask: ', loss_mask.shape, ', nw_input: ', nw_input.shape, ', ref_kspace: ', ref_kspace.shape)
@@ -153,25 +158,49 @@ with tf.Session(config=config) as sess:
         totalLoss.append(avg_cost)
         print(" Epoch:", ep, "elapsed_time = ""{:f}".format(toc), "cost =", "{:.3f}".format(avg_cost))
 
-        # log to tensorboard
+        # log loss to tensorboard
         writer.add_scalar('Loss/train', avg_cost, ep)
 
-        # add to tensorboard
+        # add to tensorboard (every 10 epochs run the model for inference)
         if ep % 10 == 0:
             nw_output_ep, _, _, _, _ = UnrollNet.UnrolledNet(nw_inputP, sens_mapsP, trn_maskP, loss_maskP).model
             nw_output_ep = sess.run(nw_output_ep, feed_dict=feedDict)
             nw_output_ep = np.abs(nw_output_ep[..., 0])
 
+            ssims = []
+            psnrs = []
+            mses = []
+
             for slice in range(nw_output_ep.shape[0]):
                 target[slice] = target[slice] / np.max(target[slice])
                 nw_output_ep[slice] = nw_output_ep[slice] / np.max(nw_output_ep[slice])
 
+                # in order to log to tensorboard we have to expand the dimensions
                 writer.add_image(f"{fname}_{str(slice)}/Mask_original", np.abs(np.expand_dims(original_mask, 0)).astype(np.float32), 0)
                 writer.add_image(f"{fname}_{str(slice)}/Mask_training", np.abs(np.expand_dims(trn_mask[slice], 0)).astype(np.float32), 0)
                 writer.add_image(f"{fname}_{str(slice)}/Mask_loss", np.abs(np.expand_dims(loss_mask[slice], 0)).astype(np.float32), 0)
                 writer.add_image(f'{fname}_{str(slice)}/Target', np.expand_dims(target[slice], 0).astype(np.float32), ep)
                 writer.add_image(f'{fname}_{str(slice)}/Reconstruction', np.expand_dims(nw_output_ep[slice], 0).astype(np.float32), ep)
                 writer.add_image(f'{fname}_{str(slice)}/Error', np.expand_dims(np.abs(target[slice] - nw_output_ep[slice]), 0).astype(np.float32), ep)
+
+                # calculate SSIM & PSNR between target and reconstruction
+                ssim = structural_similarity(nw_output_ep[slice], target[slice])
+                ssims.append(ssim)
+                psnr = peak_signal_noise_ratio(nw_output_ep[slice], target[slice])
+                psnrs.append(psnr)
+                mse = mean_squared_error(nw_output_ep[slice], target[slice])
+                mses.append(mse)
+
+                # log SSIM & PSNR to tensorboard
+                writer.add_scalar(f'SSIM/{fname}_{str(slice)}', ssim, ep)
+                writer.add_scalar(f'PSNR/{fname}_{str(slice)}', psnr, ep)
+                writer.add_scalar(f'MSE/{fname}_{str(slice)}', mse, ep)
+            
+            # import pdb
+            # pdb.set_trace()
+            # writer.add_scalar(f'vol_SSIM/{fname}_{str(slice)}', np.stack(ssims, 0), ep)
+            # writer.add_scalar(f'vol_PSNR/{fname}_{str(slice)}', np.stack(psnrs, 0), ep)
+            # writer.add_scalar(f'vol_NMSE/{fname}_{str(slice)}', np.stack(nmses, 0), ep)
 
             saver.save(sess, sess_trn_filename, global_step=ep)
 
