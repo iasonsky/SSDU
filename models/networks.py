@@ -1,18 +1,18 @@
 import tensorflow as tf
 import numpy as np
-
+import pdb
 
 def conv_layer(input_data, conv_filter, is_relu=False, is_scaling=False):
     """
     Parameters
     ----------
     x : input data
-    conv_filter : weights of the filter
+    conv_filter : weights of the filter [filter_height, filter_width, in_channels, out_channels]
     is_relu : applies  ReLU activation function
     is_scaling : Scales the output
 
     """
-
+    
     W = tf.get_variable('W', shape=conv_filter, initializer=tf.random_normal_initializer(0, 0.05))
     x = tf.nn.conv2d(input_data, W, strides=[1, 1, 1, 1], padding='SAME')
 
@@ -42,7 +42,7 @@ def ResNet(input_data, nb_res_blocks):
     nw_output : nrow x ncol x 2 . Regularizer output
 
     """
-
+    # [filter_height, filter_width, in_channels, out_channels]
     conv_filters = dict([('w1', (3, 3, 2, 64)), ('w2', (3, 3, 64, 64)), ('w3', (3, 3, 64, 2))])
     intermediate_outputs = {}
 
@@ -62,7 +62,8 @@ def ResNet(input_data, nb_res_blocks):
     with tf.variable_scope('Residual'):
         temp_output = rb_output + intermediate_outputs['layer0']
         nw_output = conv_layer(temp_output, conv_filters['w3'], is_relu=False, is_scaling=False)
-
+    # pdb.set_trace()
+    # print(nw_output)
     return nw_output
 
 

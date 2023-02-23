@@ -14,6 +14,7 @@ import parser_ops
 import masks.ssdu_masks as ssdu_masks
 import UnrollNet
 from utils import center_crop
+from utils import nmse
 import matplotlib.pyplot as plt
 from skimage.metrics import structural_similarity
 from skimage.metrics import peak_signal_noise_ratio
@@ -24,7 +25,7 @@ from tensorboardX import SummaryWriter
 parser = parser_ops.get_parser()
 args = parser.parse_args()
 os.environ["HDF5_USE_FILE_LOCKING"] = "FALSE"
-# os.environ["CUDA_VISIBLE_DEVICES"] = "2"s
+# os.environ["CUDA_VISIBLE_DEVICES"] = "3"
 
 save_dir ='saved_models'
 directory = os.path.join(save_dir, 'SSDU_' + args.data_opt + '_' +str(args.epochs)+'Epochs_Rate'+ str(args.acc_rate) + '_' + str(args.nb_unroll_blocks) + 'Unrolls_' + args.mask_type+'Selection' )
@@ -55,7 +56,12 @@ fname = kspace_dir.split('/')[-1].split('.')[0]
 # Load kspace, sensitivity maps and mask
 kspace_train = h5.File(kspace_dir, "r")['kspace'][:]
 sens_maps = h5.File(coil_dir, "r")['sensitivity_map'][:]
-original_mask = h5.File(mask_dir, "r")['random1d'][:]
+# original_mask = h5.File(mask_dir, "r")['random1d'][:]
+
+# Load precomputed masks
+original_mask = h5.File(mask_dir, "r")['mask'][:]
+trn_mask = h5.File(mask_dir, "r")['trn_mask'][:]
+loss_mask = h5.File(mask_dir, "r")['loss_mask'][:]
 
 print('\n Normalize the kspace to 0-1 region')
 for ii in range(np.shape(kspace_train)[0]):
@@ -63,7 +69,7 @@ for ii in range(np.shape(kspace_train)[0]):
 
 nSlices, *_ = kspace_train.shape
 
-trn_mask, loss_mask = np.empty((nSlices, args.nrow_GLOB, args.ncol_GLOB), dtype=np.complex64), np.empty((nSlices, args.nrow_GLOB, args.ncol_GLOB), dtype=np.complex64)
+# trn_mask, loss_mask = np.empty((nSlices, args.nrow_GLOB, args.ncol_GLOB), dtype=np.complex64), np.empty((nSlices, args.nrow_GLOB, args.ncol_GLOB), dtype=np.complex64)
 nw_input = np.empty((nSlices, args.nrow_GLOB, args.ncol_GLOB), dtype=np.complex64)
 ref_kspace = np.empty((nSlices, args.nrow_GLOB, args.ncol_GLOB, args.ncoil_GLOB), dtype=np.complex64)
 ref_kspace = np.transpose(ref_kspace, (0, 3, 1, 2))
@@ -73,7 +79,7 @@ imspace_train = np.fft.ifftshift(np.fft.ifftn(np.fft.ifftshift(kspace_train, axe
 imspace_train = center_crop(imspace_train, [args.nrow_GLOB, args.ncol_GLOB])
 kspace_train = np.fft.ifftshift(np.fft.fftn(np.fft.ifftshift(imspace_train, axes=(-2, -1)), axes=(-2, -1)), axes=(-2, -1))
 sens_maps = center_crop(sens_maps, [args.nrow_GLOB, args.ncol_GLOB])
-original_mask = np.repeat(np.expand_dims(original_mask, 0), args.nrow_GLOB, axis=0) # 2d projection of the 1d mask
+# original_mask = np.repeat(np.expand_dims(original_mask, 0), args.nrow_GLOB, axis=0) # 2d projection of the 1d mask
 
 # calculate target
 target = np.abs(np.sum(imspace_train * np.conj(sens_maps), axis=1))
@@ -81,17 +87,17 @@ target = np.abs(np.sum(imspace_train * np.conj(sens_maps), axis=1))
 print('\n size of kspace: ', kspace_train.shape, ', maps: ', sens_maps.shape, ', mask: ', original_mask.shape, ', trn_mask: ', trn_mask.shape, ', loss_mask: ', loss_mask.shape, ', nw_input: ', nw_input.shape, ', ref_kspace: ', ref_kspace.shape)
 
 print('\n create training and loss masks and generate network inputs... ')
-ssdu_masker = ssdu_masks.ssdu_masks()
+# ssdu_masker = ssdu_masks.ssdu_masks()
 for ii in range(nSlices):
     if np.mod(ii, 50) == 0:
         print('\n Iteration: ', ii)
 
-    if args.mask_type == 'Gaussian':
-        trn_mask[ii, ...], loss_mask[ii, ...] = ssdu_masker.Gaussian_selection(kspace_train[ii], original_mask, num_iter=ii)
-    elif args.mask_type == 'Uniform':
-        trn_mask[ii, ...], loss_mask[ii, ...] = ssdu_masker.uniform_selection(kspace_train[ii], original_mask, num_iter=ii)
-    else:
-        raise ValueError('Invalid mask selection')
+    # if args.mask_type == 'Gaussian':
+    #     trn_mask[ii, ...], loss_mask[ii, ...] = ssdu_masker.Gaussian_selection(kspace_train[ii], original_mask[ii], num_iter=ii)
+    # elif args.mask_type == 'Uniform':
+    #     trn_mask[ii, ...], loss_mask[ii, ...] = ssdu_masker.uniform_selection(kspace_train[ii], original_mask[ii], num_iter=ii)
+    # else:
+    #     raise ValueError('Invalid mask selection')
 
     sub_kspace = kspace_train[ii] * trn_mask[ii][np.newaxis]
     ref_kspace[ii] = kspace_train[ii] * loss_mask[ii][np.newaxis]
@@ -162,7 +168,7 @@ with tf.Session(config=config) as sess:
         writer.add_scalar('Loss/train', avg_cost, ep)
 
         # add to tensorboard (every 10 epochs run the model for inference)
-        if ep % 10 == 0:
+        if ep % 1 == 0:
             nw_output_ep, _, _, _, _ = UnrollNet.UnrolledNet(nw_inputP, sens_mapsP, trn_maskP, loss_maskP).model
             nw_output_ep = sess.run(nw_output_ep, feed_dict=feedDict)
             nw_output_ep = np.abs(nw_output_ep[..., 0])
@@ -170,13 +176,14 @@ with tf.Session(config=config) as sess:
             ssims = []
             psnrs = []
             mses = []
+            nmses = []
 
             for slice in range(nw_output_ep.shape[0]):
                 target[slice] = target[slice] / np.max(target[slice])
                 nw_output_ep[slice] = nw_output_ep[slice] / np.max(nw_output_ep[slice])
 
                 # in order to log to tensorboard we have to expand the dimensions
-                writer.add_image(f"{fname}_{str(slice)}/Mask_original", np.abs(np.expand_dims(original_mask, 0)).astype(np.float32), 0)
+                writer.add_image(f"{fname}_{str(slice)}/Mask_original", np.abs(np.expand_dims(original_mask[slice], 0)).astype(np.float32), 0)
                 writer.add_image(f"{fname}_{str(slice)}/Mask_training", np.abs(np.expand_dims(trn_mask[slice], 0)).astype(np.float32), 0)
                 writer.add_image(f"{fname}_{str(slice)}/Mask_loss", np.abs(np.expand_dims(loss_mask[slice], 0)).astype(np.float32), 0)
                 writer.add_image(f'{fname}_{str(slice)}/Target', np.expand_dims(target[slice], 0).astype(np.float32), ep)
@@ -190,17 +197,25 @@ with tf.Session(config=config) as sess:
                 psnrs.append(psnr)
                 mse = mean_squared_error(nw_output_ep[slice], target[slice])
                 mses.append(mse)
-
+                norm_mse = nmse(nw_output_ep[slice], target[slice])
+                nmses.append(norm_mse)
                 # log SSIM & PSNR to tensorboard
                 writer.add_scalar(f'SSIM/{fname}_{str(slice)}', ssim, ep)
                 writer.add_scalar(f'PSNR/{fname}_{str(slice)}', psnr, ep)
                 writer.add_scalar(f'MSE/{fname}_{str(slice)}', mse, ep)
+                writer.add_scalar(f'NMSE/{fname}_{str(slice)}', norm_mse, ep)
             
-            # import pdb
-            # pdb.set_trace()
-            # writer.add_scalar(f'vol_SSIM/{fname}_{str(slice)}', np.stack(ssims, 0), ep)
-            # writer.add_scalar(f'vol_PSNR/{fname}_{str(slice)}', np.stack(psnrs, 0), ep)
-            # writer.add_scalar(f'vol_NMSE/{fname}_{str(slice)}', np.stack(nmses, 0), ep)
+            # calculate the average for each metric
+            avg_ssim = np.average(np.array(ssims))
+            avg_psnr = np.average(np.array(psnrs))
+            avg_mse = np.average(np.array(mses))
+            avg_nmse =  np.average(np.array(nmses))
+
+            # log metrics for the whole volume
+            writer.add_scalar(f'vol_SSIM/{fname}', avg_ssim, ep)
+            writer.add_scalar(f'vol_PSNR/{fname}', avg_psnr, ep)
+            writer.add_scalar(f'vol_MSE/{fname}', avg_mse, ep)
+            writer.add_scalar(f'vol_NMSE/{fname}', avg_nmse, ep)
 
             saver.save(sess, sess_trn_filename, global_step=ep)
 

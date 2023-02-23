@@ -30,7 +30,8 @@ def get_train_directory(args):
     else:
         raise ValueError('Invalid data option')
 
-    mask_dir = 'masks/masks.h5'
+    # mask_dir1 = 'masks/masks.h5'
+    mask_dir = '/scratch/iskylitsis/data/PD/train_ssdu_masks_4x_eq/file1000108.h5'
 
     print('\n kspace dir : ', kspace_dir, '\n \n coil dir :', coil_dir, '\n \n mask dir: ', mask_dir)
 
@@ -283,6 +284,8 @@ def center_crop(data: np.ndarray, shape: Tuple[int, int]) -> np.ndarray:
     The center cropped image.
     """
     if not (0 < shape[0] <= data.shape[-2] and 0 < shape[1] <= data.shape[-1]):
+        import pdb
+        pdb.set_trace()
         raise ValueError("Invalid shapes.")
 
     w_from = (data.shape[-2] - shape[0]) // 2
@@ -291,3 +294,7 @@ def center_crop(data: np.ndarray, shape: Tuple[int, int]) -> np.ndarray:
     h_to = h_from + shape[1]
 
     return data[..., w_from:w_to, h_from:h_to]  # type: ignore
+
+def nmse(gt: np.ndarray, pred: np.ndarray) -> float:
+    """Compute Normalized Mean Squared Error (NMSE)"""
+    return np.linalg.norm(gt - pred) ** 2 / np.linalg.norm(gt) ** 2

@@ -3,6 +3,7 @@ import data_consistency as ssdu_dc
 import tf_utils
 import models.networks as networks
 import parser_ops
+import pdb
 
 parser = parser_ops.get_parser()
 args = parser.parse_args()
@@ -44,11 +45,12 @@ class UnrolledNet():
 
     def Unrolled_SSDU(self):
         x, denoiser_output, dc_output = self.input_x, self.input_x, self.input_x
+        
         all_intermediate_results = [[0 for _ in range(2)] for _ in range(args.nb_unroll_blocks)]
 
         mu_init = tf.constant(0., dtype=tf.float32)
         x0 = ssdu_dc.dc_block(self.input_x, self.sens_maps, self.trn_mask, mu_init)
-
+ 
         with tf.name_scope('SSDUModel'):
             with tf.variable_scope('Weights', reuse=tf.AUTO_REUSE):
                 for i in range(args.nb_unroll_blocks):
